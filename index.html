@@ -191,6 +191,38 @@ body {
 }
 .modal-content .close-btn:hover { color: #333; }
 
+
+/* 看广告 */
+#adModal, #adModal.show { display: none; }
+#adModal.show { display: flex !important; }
+.btn-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 8px;
+}
+.btn-row button {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.2s;
+}
+.btn-row .ad-watch-btn {
+  background: #667eea;
+  color: #fff;
+}
+.btn-row .ad-watch-btn:hover { opacity: 0.85; }
+.btn-row .pay-btn {
+  background: #ff6b81;
+  color: #fff;
+}
+.btn-row .pay-btn:hover { opacity: 0.85; }
+.btn-row button:disabled { background: #ccc !important; cursor: not-allowed; }
+
 @media (max-width: 360px) {
   .style-grid { grid-template-columns: repeat(3, 1fr); }
   .result-actions button { font-size: 10px; padding: 5px 10px; }
@@ -255,7 +287,7 @@ body {
   <!-- 使用次数 -->
   <div class="unlock-badge" id="unlockBadge">
     <div><span class="count-text" id="badgeText">免费剩余: <strong>3</strong> 次</span></div>
-    <button class="ad-btn" id="watchAdBtn" onclick="startAd()">观看广告获取 3 次</button>
+    <div id="watchAdBtn"></div>
   </div>
 
   <!-- 结果区 -->
@@ -312,17 +344,64 @@ body {
     <h3>解锁无限生成</h3>
     <div style="font-size:36px;font-weight:700;color:#ff6b81;margin:10px 0 5px;">9.9</div>
     <div style="font-size:14px;color:#999;margin-bottom:20px;">一杯奶茶的钱，永久使用</div>
-    <div style="font-size:13px;color:#999;margin-bottom:12px;">联系卖家购买解锁码：</div>
-    <div style="display:flex;gap:8px;margin-bottom:12px;justify-content:center;">
-      <input type="text" id="licenseKeyInput" placeholder="输入解锁码" style="flex:1;max-width:240px;height:40px;border:1.5px solid #e8e8e8;border-radius:8px;padding:0 12px;font-size:14px;outline:none;" />
-      <button onclick="enterLicenseKey()" style="padding:0 16px;background:#52c41a;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;">验证</button>
+    <div style="margin-bottom:10px;">
+      <div style="font-size:14px;color:#333;">永久解锁 <strong style="color:#ff6b81;font-size:20px;">9.9</strong> 元</div>
     </div>
-    <div style="margin-top:16px;">
-      <button onclick="contactSeller()" style="padding:10px 24px;background:#ff6b81;color:#fff;border:none;border-radius:20px;font-size:14px;cursor:pointer;">联系卖家购买</button>
+    <div id="payQRContainer" style="min-height:40px;">
+      <div style="display:flex;gap:12px;justify-content:center;margin-bottom:8px;">
+        <div style="text-align:center;">
+          <img id="wechatQR" src="images/qr-wechat.png" alt="微信收款码" style="width:110px;height:110px;border-radius:8px;display:block;margin:0 auto 4px;object-fit:contain;border:1px solid #eee;" onerror="this.style.display='none'">
+          <div style="font-size:11px;color:#999;">微信扫码付款</div>
+        </div>
+        <div style="text-align:center;">
+          <img id="alipayQR" src="images/qr-alipay.png" alt="支付宝收款码" style="width:110px;height:110px;border-radius:8px;display:block;margin:0 auto 4px;object-fit:contain;border:1px solid #eee;" onerror="this.style.display='none'">
+          <div style="font-size:11px;color:#999;">支付宝扫码付款</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#999;margin-bottom:10px;">
+        付款后填写订单号，<strong>自动获取解锁码</strong>
+      </div>
+      <div style="background:#f8fff8;border:1px solid #e0f0e0;border-radius:10px;padding:12px;margin-bottom:8px;">
+        <div style="font-size:13px;font-weight:600;color:#333;margin-bottom:8px;">自助获取解锁码</div>
+        <div style="font-size:12px;color:#666;margin-bottom:8px;">
+          1. 扫码付款 <strong style="color:#ff6b81;">9.9 元</strong><br>
+          2. 复制支付宝/微信的 <strong>转账单号</strong><br>
+          3. 粘贴到下面，点击获取解锁码
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:4px;">
+          <input type="text" id="txIdInput" placeholder="粘贴转账单号" style="flex:1;height:34px;border:1.5px solid #ddd;border-radius:8px;padding:0 10px;font-size:13px;outline:none;" />
+          <button id="getKeyBtn" onclick="getKeyByTxId()" style="padding:0 12px;background:#ff6b81;color:#fff;border:none;border-radius:8px;font-size:12px;cursor:pointer;white-space:nowrap;">获取解锁码</button>
+        </div>
+        <div id="selfServiceResult" style="font-size:13px;color:#ff6b81;font-weight:600;margin-top:6px;min-height:20px;"></div>
+      </div>
     </div>
-    <div style="font-size:12px;color:#bbb;margin-top:16px;">购买后永久有效</div>
+    <div id="payWaiting" style="display:none;font-size:12px;color:#999;margin:8px 0;">
+      <span>等待支付完成...</span>
+    </div>
+    <div id="paySuccess" style="display:none;font-size:14px;color:#52c41a;font-weight:600;margin:8px 0;">
+      支付成功！正在解锁...
+    </div>
+    <div style="font-size:12px;color:#ccc;margin-top:6px;border-top:1px solid #f0f0f0;padding-top:8px;">
+      已有解锁码？
+      <input type="text" id="licenseKeyInput" placeholder="粘贴解锁码" style="width:120px;height:30px;border:1px solid #ddd;border-radius:6px;padding:0 8px;font-size:12px;outline:none;" />
+      <button onclick="enterLicenseKey()" style="padding:2px 10px;background:#52c41a;color:#fff;border:none;border-radius:6px;font-size:11px;cursor:pointer;">验证</button>
+    </div>
   </div>
-</div><!-- 关键词弹窗 -->
+</div><!-- 看广告弹窗 -->
+<div class="modal-overlay" id="adModal" style="display:none;">
+  <div class="modal-content" style="text-align:center;display:block;">
+    <button class="close-btn" onclick="closeModal('adModal')">&times;</button>
+    <h3 id="adTitle">观看广告</h3>
+    <div id="adCountdown" style="font-size:56px;font-weight:700;color:#ff6b81;margin:16px 0 8px;">15</div>
+    <div style="font-size:14px;color:#999;margin-bottom:16px;">观看完广告可获得 <strong style="color:#ff6b81;">3</strong> 次免费生成</div>
+    <div style="height:4px;background:#f0f0f0;border-radius:2px;margin-bottom:16px;overflow:hidden;">
+      <div id="adProgress" style="height:100%;width:0%;background:linear-gradient(90deg,#ff6b81,#ff8a9c);border-radius:2px;"></div>
+    </div>
+    <div style="font-size:12px;color:#ccc;">今日已观看: <span id="adCountToday">0</span> 次广告</div>
+  </div>
+</div>
+
+<!-- 关键词弹窗 -->
 <div class="modal-overlay" id="keywordModal">
   <div class="modal-content">
     <button class="close-btn" onclick="closeModal('keywordModal')">&times;</button>
@@ -379,6 +458,7 @@ function getTodayUsage() {
 }
 
 function getBonusUses() {
+  checkDailyReset();
   return parseInt(localStorage.getItem('dy_bonus_uses') || '0');
 }
 
@@ -418,10 +498,197 @@ function enterLicenseKey() {
   }
 }
 
+// ===== 收款码配置 =====
+// 把你的收款码图片放到 images/ 文件夹，然后在这里填文件名
+// 或者用网络图片链接
+const PAY_QR_WECHAT = 'images/qr-wechat.png';  // 微信收款码
+const PAY_QR_ALIPAY = 'images/qr-alipay.png';  // 支付宝收款码
+
 function contactSeller() {
-  showToast('请联系卖家获取解锁码');
+  showPaymentModal();
 }
 
+// ===== 自助获取解锁码 =====
+// 基于付款单号生成解锁码，同一单号只能用一次
+function getKeyByTxId() {
+  var txId = document.getElementById('txIdInput').value.trim();
+  var resultEl = document.getElementById('selfServiceResult');
+  if (!txId || txId.length < 5) {
+    resultEl.textContent = '请输入有效的转账单号（至少5位）';
+    resultEl.style.color = '#ff4d4f';
+    return;
+  }
+  // 检查是否已使用
+  var used = JSON.parse(localStorage.getItem('dy_used_txids') || '[]');
+  if (used.indexOf(txId) >= 0) {
+    resultEl.textContent = '此单号已被使用，请联系卖家';
+    resultEl.style.color = '#ff4d4f';
+    return;
+  }
+  // 基于单号生成解锁码
+  var raw = txId.toUpperCase().replace(/[^0-9A-Z]/g, '');
+  var p2 = raw.slice(0, 4).padEnd(4, 'X');
+  var p3 = raw.slice(4, 8).padEnd(4, 'Y');
+  // 校验和要能被7整除
+  var sum = 0;
+  for (var i = 0; i < p2.length; i++) sum += p2.charCodeAt(i);
+  for (var i = 0; i < p3.length; i++) sum += p3.charCodeAt(i);
+  if (sum % 7 !== 0) {
+    // 调整最后一位
+    var arr = p3.split('');
+    for (var c = 65; c <= 90; c++) {
+      arr[3] = String.fromCharCode(c);
+      var s = 0;
+      for (var j = 0; j < p2.length; j++) s += p2.charCodeAt(j);
+      for (var j = 0; j < arr.length; j++) s += arr[j].charCodeAt(0);
+      if (s % 7 === 0) { p3 = arr.join(''); break; }
+    }
+  }
+  var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  var p4 = '';
+  for (var i = 0; i < 4; i++) p4 += chars[Math.floor(Math.random() * chars.length)];
+  var key = 'DYCW-' + p2 + '-' + p3 + '-' + p4;
+  
+  // 保存已用单号
+  used.push(txId);
+  localStorage.setItem('dy_used_txids', JSON.stringify(used));
+  
+  resultEl.textContent = '解锁码: ' + key;
+  resultEl.style.color = '#ff6b81';
+  // 自动填入
+  document.getElementById('licenseKeyInput').value = key;
+}
+
+// ===== PayJs 自动支付 =====
+let payjsOrderId = '';
+let payPollingTimer = null;
+
+function startPay() {
+  var btn = document.getElementById('payNowBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '正在创建订单...'; }
+
+  fetch('/api/pay')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) {
+        payjsOrderId = data.payjs_order_id;
+        var qrContainer = document.getElementById('payQRContainer');
+        qrContainer.innerHTML = '<div style="text-align:center;">' +
+          '<img src="' + data.qrcode + '" style="width:200px;height:200px;border-radius:8px;display:block;margin:0 auto 10px;" />' +
+          '<div style="font-size:13px;color:#666;">请使用微信扫码付款</div>' +
+          '<div style="font-size:12px;color:#999;margin-top:4px;">金额: 9.90 元</div>' +
+          '</div>';
+        qrContainer.style.display = 'block';
+        document.getElementById('payWaiting').style.display = 'block';
+        if (btn) { btn.style.display = 'none'; }
+        // 开始轮询支付状态
+        startPolling();
+      } else {
+        if (btn) { btn.disabled = false; btn.textContent = '微信支付 9.9 元'; }
+        showToast(data.msg || '创建订单失败');
+      }
+    })
+    .catch(function(e) {
+      if (btn) { btn.disabled = false; btn.textContent = '微信支付 9.9 元'; }
+      showToast('网络错误，请稍后重试');
+    });
+}
+
+function startPolling() {
+  if (payPollingTimer) clearInterval(payPollingTimer);
+  payPollingTimer = setInterval(function() {
+    if (!payjsOrderId) return;
+    fetch('/api/check?payjs_order_id=' + payjsOrderId)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.paid) {
+          clearInterval(payPollingTimer);
+          payPollingTimer = null;
+          // 支付成功！自动解锁
+          var unlockKey = 'AUTO-' + payjsOrderId.slice(-8).toUpperCase();
+          localStorage.setItem('dy_license_key', unlockKey);
+          document.getElementById('paySuccess').style.display = 'block';
+          document.getElementById('payQRContainer').style.display = 'none';
+          document.getElementById('payWaiting').style.display = 'none';
+          setTimeout(function() {
+            closeModal('paymentModal');
+            updateFreeBadge();
+            showToast('支付成功！已自动解锁');
+          }, 1500);
+        }
+      })
+      .catch(function() {});
+  }, 2000);
+}
+
+function closePayModal() {
+  if (payPollingTimer) { clearInterval(payPollingTimer); payPollingTimer = null; }
+  closeModal('paymentModal');
+}
+
+
+
+// ===== 看广告获取次数 =====
+const AD_DURATION = 15;
+const AD_REWARD = 3;
+let adTimer = null;
+
+function startAd() {
+  let countdown = AD_DURATION;
+  var el = document.getElementById('adCountdown');
+  var prog = document.getElementById('adProgress');
+  var todayEl = document.getElementById('adCountToday');
+  var titleEl = document.getElementById('adTitle');
+  if (!el || !prog) return;
+  
+  el.textContent = countdown;
+  prog.style.width = '0%';
+  todayEl.textContent = getAdWatchedToday();
+  titleEl.textContent = '观看广告';
+  document.getElementById('adModal').classList.add('show');
+  document.getElementById('adModal').style.display = 'flex';
+
+  if (adTimer) clearInterval(adTimer);
+  var startTime = Date.now();
+
+  adTimer = setInterval(function() {
+    var elapsed = Math.floor((Date.now() - startTime) / 1000);
+    var remain = Math.max(0, AD_DURATION - elapsed);
+    var pct = Math.min(100, (elapsed / AD_DURATION) * 100);
+
+    el.textContent = remain;
+    prog.style.width = pct + '%';
+
+    if (remain <= 0) {
+      clearInterval(adTimer);
+      adTimer = null;
+      titleEl.textContent = '广告观看完成!';
+      el.textContent = '完成';
+
+      var watched = parseInt(localStorage.getItem('dy_ad_watched_today') || '0') + 1;
+      localStorage.setItem('dy_ad_watched_today', watched.toString());
+      var bonus = getBonusUses() + AD_REWARD;
+      localStorage.setItem('dy_bonus_uses', bonus.toString());
+
+      setTimeout(function() {
+        closeModal('adModal');
+        updateFreeBadge();
+        showToast('获得 ' + AD_REWARD + ' 次免费生成!');
+      }, 800);
+    }
+  }, 200);
+}
+
+function getAdWatchedToday() {
+  return parseInt(localStorage.getItem('dy_ad_watched_today') || '0');
+}
+
+// 点击遮罩时如果广告在播放不能关闭
+document.addEventListener('click', function(e) {
+  if (e.target && e.target.id === 'adModal' && adTimer) {
+    return;
+  }
+});
 function getRemainingUses() {
   return Math.max(0, DAILY_FREE - getTodayUsage() + getBonusUses());
 }
@@ -455,11 +722,14 @@ function updateFreeBadge() {
   } else if (isUnlocked()) {
     elem.innerHTML = '已解锁，无限使用';
     adBtn.style.display = 'none';
+    document.getElementById('paymentModal').style.display = 'none';
   } else {
     elem.innerHTML = '免费次数已用完';
     adBtn.style.display = 'block';
-    adBtn.textContent = '付费解锁无限使用';
-    adBtn.disabled = false;
+    adBtn.innerHTML = '<div class="btn-row">' +
+      '<button class="ad-watch-btn" onclick="startAd()">观看广告得3次</button>' +
+      '<button class="pay-btn" onclick="showPaymentModal()">付费解锁不限量</button>' +
+      '</div>';
   }
 }
 
@@ -472,6 +742,13 @@ function startAd() {
 
 function showPaymentModal() {
   document.getElementById('paymentModal').classList.add('show');
+  // 重置支付状态
+  payjsOrderId = '';
+  document.getElementById('payQRContainer').style.display = 'block';
+  document.getElementById('payWaiting').style.display = 'none';
+  document.getElementById('paySuccess').style.display = 'none';
+  var btn = document.getElementById('payNowBtn');
+  if (btn) { btn.disabled = false; btn.textContent = '微信支付 9.9 元'; btn.style.display = 'inline-block'; }
 }
 
 // ===== API Key =====
