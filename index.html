@@ -358,21 +358,13 @@ body {
           <div style="font-size:11px;color:#999;">支付宝扫码付款</div>
         </div>
       </div>
-      <div style="font-size:12px;color:#999;margin-bottom:10px;">
-        付款后填写订单号，<strong>自动获取解锁码</strong>
-      </div>
-      <div style="background:#f8fff8;border:1px solid #e0f0e0;border-radius:10px;padding:12px;margin-bottom:8px;">
-        <div style="font-size:13px;font-weight:600;color:#333;margin-bottom:8px;">自助获取解锁码</div>
-        <div style="font-size:12px;color:#666;margin-bottom:8px;">
-          1. 扫码付款 <strong style="color:#ff6b81;">9.9 元</strong><br>
-          2. 复制支付宝/微信的 <strong>转账单号</strong><br>
-          3. 粘贴到下面，点击获取解锁码
+      <div id="payArea">
+        <button id="payBtn" onclick="startCodePay()" style="padding:10px 28px;background:#07c160;color:#fff;border:none;border-radius:22px;font-size:15px;font-weight:500;cursor:pointer;margin-bottom:8px;">码支付 9.9 元 自动解锁</button>
+        <div id="payQrArea" style="display:none;margin:8px 0;">
+          <iframe id="payFrame" style="width:250px;height:300px;border:none;border-radius:8px;margin:0 auto;display:block;" sandbox="allow-scripts allow-top-navigation"></iframe>
+          <div id="payStatus" style="font-size:13px;color:#999;margin-top:6px;">等待支付完成...</div>
         </div>
-        <div style="display:flex;gap:6px;margin-bottom:4px;">
-          <input type="text" id="txIdInput" placeholder="粘贴转账单号" style="flex:1;height:34px;border:1.5px solid #ddd;border-radius:8px;padding:0 10px;font-size:13px;outline:none;" />
-          <button id="getKeyBtn" onclick="getKeyByTxId()" style="padding:0 12px;background:#ff6b81;color:#fff;border:none;border-radius:8px;font-size:12px;cursor:pointer;white-space:nowrap;">获取解锁码</button>
-        </div>
-        <div id="selfServiceResult" style="font-size:13px;color:#ff6b81;font-weight:600;margin-top:6px;min-height:20px;"></div>
+        <div id="paySuccessArea" style="display:none;font-size:14px;color:#52c41a;font-weight:600;margin:8px 0;">支付成功！正在自动解锁...</div>
       </div>
     </div>
     <div id="payWaiting" style="display:none;font-size:12px;color:#999;margin:8px 0;">
@@ -508,123 +500,9 @@ function contactSeller() {
   showPaymentModal();
 }
 
-// ===== 自助获取解锁码 =====
-// 基于付款单号生成解锁码，同一单号只能用一次
-function getKeyByTxId() {
-  var txId = document.getElementById('txIdInput').value.trim();
-  var resultEl = document.getElementById('selfServiceResult');
-  if (!txId || txId.length < 5) {
-    resultEl.textContent = '请输入有效的转账单号（至少5位）';
-    resultEl.style.color = '#ff4d4f';
-    return;
-  }
-  // 检查是否已使用
-  var used = JSON.parse(localStorage.getItem('dy_used_txids') || '[]');
-  if (used.indexOf(txId) >= 0) {
-    resultEl.textContent = '此单号已被使用，请联系卖家';
-    resultEl.style.color = '#ff4d4f';
-    return;
-  }
-  // 基于单号生成解锁码
-  var raw = txId.toUpperCase().replace(/[^0-9A-Z]/g, '');
-  var p2 = raw.slice(0, 4).padEnd(4, 'X');
-  var p3 = raw.slice(4, 8).padEnd(4, 'Y');
-  // 校验和要能被7整除
-  var sum = 0;
-  for (var i = 0; i < p2.length; i++) sum += p2.charCodeAt(i);
-  for (var i = 0; i < p3.length; i++) sum += p3.charCodeAt(i);
-  if (sum % 7 !== 0) {
-    // 调整最后一位
-    var arr = p3.split('');
-    for (var c = 65; c <= 90; c++) {
-      arr[3] = String.fromCharCode(c);
-      var s = 0;
-      for (var j = 0; j < p2.length; j++) s += p2.charCodeAt(j);
-      for (var j = 0; j < arr.length; j++) s += arr[j].charCodeAt(0);
-      if (s % 7 === 0) { p3 = arr.join(''); break; }
-    }
-  }
-  var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  var p4 = '';
-  for (var i = 0; i < 4; i++) p4 += chars[Math.floor(Math.random() * chars.length)];
-  var key = 'DYCW-' + p2 + '-' + p3 + '-' + p4;
-  
-  // 保存已用单号
-  used.push(txId);
-  localStorage.setItem('dy_used_txids', JSON.stringify(used));
-  
-  resultEl.textContent = '解锁码: ' + key;
-  resultEl.style.color = '#ff6b81';
-  // 自动填入
-  document.getElementById('licenseKeyInput').value = key;
-}
 
-// ===== PayJs 自动支付 =====
-let payjsOrderId = '';
-let payPollingTimer = null;
 
-function startPay() {
-  var btn = document.getElementById('payNowBtn');
-  if (btn) { btn.disabled = true; btn.textContent = '正在创建订单...'; }
 
-  fetch('/api/pay')
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      if (data.success) {
-        payjsOrderId = data.payjs_order_id;
-        var qrContainer = document.getElementById('payQRContainer');
-        qrContainer.innerHTML = '<div style="text-align:center;">' +
-          '<img src="' + data.qrcode + '" style="width:200px;height:200px;border-radius:8px;display:block;margin:0 auto 10px;" />' +
-          '<div style="font-size:13px;color:#666;">请使用微信扫码付款</div>' +
-          '<div style="font-size:12px;color:#999;margin-top:4px;">金额: 9.90 元</div>' +
-          '</div>';
-        qrContainer.style.display = 'block';
-        document.getElementById('payWaiting').style.display = 'block';
-        if (btn) { btn.style.display = 'none'; }
-        // 开始轮询支付状态
-        startPolling();
-      } else {
-        if (btn) { btn.disabled = false; btn.textContent = '微信支付 9.9 元'; }
-        showToast(data.msg || '创建订单失败');
-      }
-    })
-    .catch(function(e) {
-      if (btn) { btn.disabled = false; btn.textContent = '微信支付 9.9 元'; }
-      showToast('网络错误，请稍后重试');
-    });
-}
-
-function startPolling() {
-  if (payPollingTimer) clearInterval(payPollingTimer);
-  payPollingTimer = setInterval(function() {
-    if (!payjsOrderId) return;
-    fetch('/api/check?payjs_order_id=' + payjsOrderId)
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (data.paid) {
-          clearInterval(payPollingTimer);
-          payPollingTimer = null;
-          // 支付成功！自动解锁
-          var unlockKey = 'AUTO-' + payjsOrderId.slice(-8).toUpperCase();
-          localStorage.setItem('dy_license_key', unlockKey);
-          document.getElementById('paySuccess').style.display = 'block';
-          document.getElementById('payQRContainer').style.display = 'none';
-          document.getElementById('payWaiting').style.display = 'none';
-          setTimeout(function() {
-            closeModal('paymentModal');
-            updateFreeBadge();
-            showToast('支付成功！已自动解锁');
-          }, 1500);
-        }
-      })
-      .catch(function() {});
-  }, 2000);
-}
-
-function closePayModal() {
-  if (payPollingTimer) { clearInterval(payPollingTimer); payPollingTimer = null; }
-  closeModal('paymentModal');
-}
 
 
 
@@ -743,12 +621,100 @@ function startAd() {
 function showPaymentModal() {
   document.getElementById('paymentModal').classList.add('show');
   // 重置支付状态
-  payjsOrderId = '';
-  document.getElementById('payQRContainer').style.display = 'block';
-  document.getElementById('payWaiting').style.display = 'none';
-  document.getElementById('paySuccess').style.display = 'none';
-  var btn = document.getElementById('payNowBtn');
-  if (btn) { btn.disabled = false; btn.textContent = '微信支付 9.9 元'; btn.style.display = 'inline-block'; }
+  document.getElementById('payArea').style.display = 'block';
+  document.getElementById('payQrArea').style.display = 'none';
+  document.getElementById('paySuccessArea').style.display = 'none';
+  var btn = document.getElementById('payBtn');
+  if (btn) { btn.disabled = false; btn.style.display = 'inline-block'; btn.textContent = '码支付 9.9 元 自动解锁'; }
+}
+
+// ===== 码支付自动支付 =====
+var payPollTimer = null;
+var currentOrderId = '';
+
+function startCodePay() {
+  var btn = document.getElementById('payBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '正在创建订单...'; }
+  document.getElementById('paySuccessArea').style.display = 'none';
+
+  fetch('/api/pay')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) {
+        currentOrderId = data.out_trade_no;
+        // 显示二维码（码支付返回的可能是支付页面URL或二维码图片URL）
+        var qrUrl = data.qrcode || data.pay_url || '';
+        var frame = document.getElementById('payFrame');
+        if (qrUrl) {
+          frame.src = qrUrl;
+        } else {
+          // 降级显示
+          frame.style.display = 'none';
+        }
+        document.getElementById('payQrArea').style.display = 'block';
+        document.getElementById('payStatus').textContent = '请使用微信扫码支付 9.9 元';
+        if (btn) btn.style.display = 'none';
+        // 开始轮询
+        startPayPolling();
+      } else {
+        if (btn) { btn.disabled = false; btn.textContent = '码支付 9.9 元 自动解锁'; }
+        showToast(data.msg || '创建订单失败，请稍后重试');
+      }
+    })
+    .catch(function() {
+      if (btn) { btn.disabled = false; btn.textContent = '码支付 9.9 元 自动解锁'; }
+      showToast('网络错误，请稍后重试');
+    });
+}
+
+function startPayPolling() {
+  if (payPollTimer) clearInterval(payPollTimer);
+  payPollTimer = setInterval(function() {
+    if (!currentOrderId) return;
+    fetch('/api/check?out_trade_no=' + currentOrderId)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.paid) {
+          clearInterval(payPollTimer);
+          payPollTimer = null;
+          paymentSuccess();
+        }
+      })
+      .catch(function() {});
+  }, 2000);
+  // 超时5分钟后停止
+  setTimeout(function() {
+    if (payPollTimer) {
+      clearInterval(payPollTimer);
+      payPollTimer = null;
+      document.getElementById('payStatus').textContent = '支付超时，请重新点击支付按钮';
+      var btn = document.getElementById('payBtn');
+      if (btn) { btn.disabled = false; btn.textContent = '重新支付 9.9 元'; btn.style.display = 'inline-block'; }
+    }
+  }, 300000);
+}
+
+function paymentSuccess() {
+  // 自动生成解锁码
+  var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  function rand(n) { var s=''; for(var i=0;i<n;i++) s+=chars[Math.floor(Math.random()*chars.length)]; return s; }
+  var p2,p3;
+  do { p2=rand(4); p3=rand(4); }
+  while(!((p2+p3).split('').reduce(function(s,c){return s+c.charCodeAt(0);},0)%7===0));
+  var key = 'DYCW-' + p2 + '-' + p3 + '-' + rand(4);
+  
+  localStorage.setItem('dy_license_key', key);
+  document.getElementById('payArea').style.display = 'none';
+  document.getElementById('paySuccessArea').style.display = 'block';
+  document.getElementById('licenseKeyInput').value = key;
+  
+  setTimeout(function() {
+    closeModal('paymentModal');
+    updateFreeBadge();
+    showToast('支付成功！解锁码: ' + key);
+    // 已自动填入解锁码，自动验证
+    enterLicenseKey();
+  }, 1500);
 }
 
 // ===== API Key =====
